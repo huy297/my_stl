@@ -1,7 +1,7 @@
 #include <cstddef>
 #include <memory>
 
-#include "./include/allocator.hpp"
+#include "./allocator.hpp"
 
 template<typename T, typename Allocator = _Allocator<T>> 
 class _Vector {
@@ -27,9 +27,12 @@ private:
     allocator_type alloc_;
 
     void ensure_capacity(size_type new_cap_) {
+        new_cap_ = new_cap_ == 0 ? 1 : new_cap_;
+
         if (cap_ >= new_cap_) {
             return;
         }
+
 
         pointer new_data_ = alloc_.allocate(new_cap_);
 
@@ -57,6 +60,8 @@ private:
             alloc_.deallocate(data_, cap_);
         }
 
+        data_ = new_data_;
+
         cap_ = new_cap_;
         
     }
@@ -82,7 +87,17 @@ public:
 
     // copy constructor
 
-    _Vector(const _Vector& other) : data_(nullptr), size_(0), cap_(0) {
+    explicit _Vector(_Vector& other) : data_(other.data_), size_(other.size_), cap_(other.cap_) {
+        if (other.size_ == 0) {
+            return;
+        }
+
+        other.data_ = nullptr;
+        other.size_ = 0;
+        other.cap_ = 0;
+    }
+
+    _Vector(const _Vector&& other) : data_(nullptr), size_(0), cap_(0) {
         if (other.size_ == 0) {
             return;
         }
@@ -94,7 +109,7 @@ public:
         }
 
         size_ = other.size_;
-        data_ = size_;
+        cap_ = size_;
     }
 
     // destructor
@@ -105,7 +120,7 @@ public:
         }
 
         if (data_) {
-            alloc_.deallocate(data_, cap_)
+            alloc_.deallocate(data_, cap_);
         }
     }
 
@@ -133,6 +148,25 @@ public:
         }
         
         size_ = other.size_;
+
+        return *this;
+    }
+
+    _Vector& operator=(_Vector&& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        clear();
+        if (data_) alloc_.deallocate(data_, cap_);
+
+        data_ = other.data_;
+        size_ = other.size_;
+        cap_ = other.cap_;
+
+        other.data_ = nullptr;
+        other.size_ = 0;
+        other.cap_ = 0;
 
         return *this;
     }
@@ -239,7 +273,7 @@ public:
         return data_;
     }
 
-    const pointer data() const {
+    const_pointer data() const {
         return data_;
     }
 
@@ -363,7 +397,7 @@ public:
 
         for (int i = size_; i > index; i--) {
             alloc_.construct(data_ + i, std::move(data_[i - 1]));
-            alloc_.destroy(data + i - 1);
+            alloc_.destroy(data_ + i - 1);
         }
 
         alloc_.construct(data_ + index, value);
@@ -382,7 +416,7 @@ public:
 
         for (size_type i = size_; i > index; i--) {
             alloc_.construct(data_ + i, std::move(data_[i - 1]));
-            alloc_.destroy(data + i - 1);
+            alloc_.destroy(data_ + i - 1);
         }
 
         alloc_.construct(data_ + index, std::move(value));
@@ -399,7 +433,7 @@ public:
         size_type new_size_ = size_ + count;
 
         if (new_size_ > cap_) {
-            size_type new_cap_ = std::max(new_size, cap_ * 2);
+            size_type new_cap_ = std::max(new_size_, cap_ * 2);
 
             reserve(new_cap_);
         }
@@ -430,7 +464,7 @@ public:
 
         for (size_type i = size_; i > index; i--) {
             alloc_.construct(data_ + i, std::move(data_[i - 1]));
-            alloc_.destroy(data + i - 1);
+            alloc_.destroy(data_ + i - 1);
         }
 
         alloc_.construct(data_ + index, std::forward<Args>(args)...);
@@ -440,5 +474,104 @@ public:
     }
 
 
+    iterator erase(iterator pos) {
+        size_type index = pos - cbegin();
+        alloc_.destroy(data_ + index);
 
+        for (size_type i = index; i < size_ - 1; i++) {
+            alloc_.construct(data_ + i, data_[i + 1]);
+            alloc_.destroy(data_ + i + 1);
+        }
+
+        size_ -= 1;
+        
+        return cbegin() + index;
+    }
+
+
+    void push_back(const value_type& value) {
+
+        if (size_ == cap_) {
+            ensure_capacity(cap_ * 2);
+        }
+
+        alloc_.construct(data_ + size_, value);
+        size_ += 1;
+
+    }
+
+    void push_back(value_type&& value) {
+
+        if (size_ == cap_) {
+
+            ensure_capacity(cap_ * 2);
+        }
+
+        
+        alloc_.construct(data_ + size_, std::move(value));
+        size_ += 1;
+
+    } 
+
+    template<class... Args>
+    void emplace_back(Args&&... args) {
+        if (size_ == cap_) {
+            ensure_capacity(cap_ * 2);
+        }
+
+        alloc_.construct(data_ + size_, std::forward<Args>(args)...);
+        size_ += 1;
+    }
+
+    template<class... Args>
+    reference emplace_back(Args&&... args) {
+        if (size_ == cap_) {
+            ensure_capacity(cap_ * 2);
+        }
+
+        alloc_.construct(data_ + size_, std::forward<Args>(args)...);
+        size_ += 1;
+
+        return data_[size_ - 1];
+    }
+
+
+    void pop_back() {
+        size_--;
+        alloc_.destroy(data_ + size_);
+    }
+
+    void resize(size_type count) {
+        if (count > cap_) {
+            ensure_capacity(cap_ * 2);
+        }
+
+        for (int i = 0; i < size_; i++) {
+            alloc_.deallocate(data_ + i);
+        }
+
+        for (int i = 0; i < count; i++) {
+            alloc_.construct(data_ + i, value_type());
+        }
+    }
+
+    void resize(size_type count, const value_type& value) {
+        if (count > cap_) {
+            ensure_capacity(cap_ * 2);
+        }
+
+        for (int i = 0; i < size_; i++) {
+            alloc_.deallocate(data_ + i);
+        }
+
+        for (int i = 0; i < count; i++) {
+            alloc_.construct(data_ + i, value);
+        }
+    }
+
+    void swap(_Vector &other) {
+        std::swap(data_, other.data_);
+        std::swap(size_, other.size_);
+        std::swap(cap_, other.cap_);
+    }
 };

@@ -4,11 +4,11 @@ CXXFLAGS = -std=c++17 -Wall -O2
 BUILD_DIR = build
 TEST_DIR = test
 
-file ?= test_mystring
+file ?= test_myvector
 
 
-SRC = test_mystring.cpp
-OUT = test_mystring
+SRC = test_myvector.cpp
+OUT = test_myvector
 
 
 run: 
